@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artist Stats</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Playfair+Display:wght@700&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Montserrat', sans-serif;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .gradient-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(-45deg, #000000, #1a0000, #000000, #330000);
+            background-size: 400% 400%;
+            animation: gradientWave 15s ease infinite;
+            z-index: -1;
+        }
+        
+        @keyframes gradientWave {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .user-avatar {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            object-fit: cover;
+            cursor: pointer;
+            transition: transform 0.3s;
+            z-index: 10;
+        }
+        
+        .user-avatar:hover {
+            transform: scale(1.1);
+        }
+        
+        .user-menu {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(30, 30, 30, 0.95);
+            border-radius: 15px;
+            padding: 10px 0;
+            width: 200px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+            transform-origin: top right;
+            transform: scale(0);
+            opacity: 0;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+        }
+        
+        .user-menu.open {
+            transform: scale(1);
+            opacity: 1;
+        }
+        
+        .menu-item {
+            padding: 12px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+        }
+        
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .menu-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .artist-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin-top: 30px;
+            margin-left: 20px;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+        
+        .last-update {
+            font-size: 12px;
+            color: #aaa;
+            margin-left: 20px;
+            margin-top: 5px;
+            margin-bottom: 30px;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 0 20px 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .glass-panel:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .panel-title {
+            font-size: 14px;
+            color: #ccc;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .panel-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .growth {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .growth.positive {
+            color: #4CAF50; /* Зеленый для положительных значений */
+        }
+        
+        .growth.negative {
+            color: #f44336; /* Красный для отрицательных значений */
+        }
+        
+        .loading-dots::after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        .royalty-value {
+            color: #ff4d4d;
+            font-size: 28px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: rgba(30, 30, 30, 0.9);
+            border-radius: 20px;
+            padding: 20px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .time-periods {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .time-period {
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-size: 14px;
+        }
+        
+        .time-period.active {
+            background: rgba(255, 0, 0, 0.5);
+            font-weight: bold;
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="gradient-bg"></div>
+    
+    <img id="user-avatar" class="user-avatar" src="" alt="User Avatar">
+    
+    <div class="user-menu" id="user-menu">
+        <div class="menu-item" onclick="handleMenuItemClick('payout')">
+            <i class="fas fa-wallet"></i> Выплата
+        </div>
+        <div class="menu-item" onclick="handleMenuItemClick('support')">
+            <i class="fas fa-headset"></i> Поддержка
+        </div>
+        <div class="menu-item" onclick="handleMenuItemClick('logout')">
+            <i class="fas fa-sign-out-alt"></i> Выход
+        </div>
+    </div>
+    
+    <h1 class="artist-name" id="artist-name">Artist Name</h1>
+    <div class="last-update" id="last-update">Last update: loading...</div>
+    
+    <div class="glass-panel" id="listeners-panel">
+        <div class="panel-title">Monthly Listeners</div>
+        <div class="panel-value" id="listeners">...</div>
+        <div class="growth" id="listeners-growth"></div>
+    </div>
+    
+    <div class="glass-panel" id="royalties-panel">
+        <div class="panel-title">Estimated Royalties</div>
+        <div class="panel-value royalty-value" id="royalties">...</div>
+        <div class="growth" id="royalties-growth"></div>
+    </div>
+
+    <!-- Modal for Listeners Chart -->
+    <div class="modal" id="listeners-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Listeners Statistics</div>
+                <button class="close-modal" onclick="closeModal('listeners-modal')">&times;</button>
+            </div>
+            <div class="time-periods">
+                <div class="time-period active" data-period="1d">1 Day</div>
+                <div class="time-period" data-period="1w">1 Week</div>
+                <div class="time-period" data-period="1m">1 Month</div>
+                <div class="time-period" data-period="6m">6 Months</div>
+                <div class="time-period" data-period="1y">1 Year</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="listeners-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Royalties Chart -->
+    <div class="modal" id="royalties-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Royalties Statistics</div>
+                <button class="close-modal" onclick="closeModal('royalties-modal')">&times;</button>
+            </div>
+            <div class="time-periods">
+                <div class="time-period active" data-period="1d">1 Day</div>
+                <div class="time-period" data-period="1w">1 Week</div>
+                <div class="time-period" data-period="1m">1 Month</div>
+                <div class="time-period" data-period="6m">6 Months</div>
+                <div class="time-period" data-period="1y">1 Year</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="royalties-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // Get user data from Telegram
+        const user = tg.initDataUnsafe.user;
+        
+        // Set user avatar if available
+        if (user && user.photo_url) {
+            document.getElementById('user-avatar').src = user.photo_url;
+        } else {
+            document.getElementById('user-avatar').src = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+        }
+        
+        // Set artist name
+        document.getElementById('artist-name').textContent = user ? user.first_name + ' ' + (user.last_name || '') : 'Artist Name';
+        
+        // Elements
+        const listenersElement = document.getElementById('listeners');
+        const royaltiesElement = document.getElementById('royalties');
+        const updateElement = document.getElementById('last-update');
+        const listenersGrowth = document.getElementById('listeners-growth');
+        const royaltiesGrowth = document.getElementById('royalties-growth');
+        const userAvatar = document.getElementById('user-avatar');
+        const userMenu = document.getElementById('user-menu');
+        
+        // Charts
+        let listenersChart = null;
+        let royaltiesChart = null;
+        
+        // Add loading animation
+        listenersElement.classList.add('loading-dots');
+        royaltiesElement.classList.add('loading-dots');
+        
+        // Function to fetch data (mock or real)
+        function fetchData() {
+            return new Promise((resolve) => {
+                // Simulate API delay
+                setTimeout(() => {
+                    const mockData = {
+                        listeners: {
+                            current: Math.floor(Math.random() * 5000000) + 100000,
+                            previous: Math.floor(Math.random() * 5000000),
+                            history: {
+                                '1d': generateRandomData(24, 100000, 5000000),
+                                '1w': generateRandomData(7, 100000, 5000000),
+                                '1m': generateRandomData(30, 100000, 5000000),
+                                '6m': generateRandomData(6, 1000000, 5000000),
+                                '1y': generateRandomData(12, 1000000, 5000000)
+                            }
+                        },
+                        royalties: {
+                            // Гарантируем, что текущие выплаты не будут отрицательными
+                            current: Math.max(0, (Math.random() * 1000000)).toFixed(3),
+                            // Гарантируем, что предыдущие выплаты не будут отрицательными
+                            previous: Math.max(0, (Math.random() * 1000000)).toFixed(3),
+                            history: {
+                                '1d': generateRandomData(24, 100, 10000, true),
+                                '1w': generateRandomData(7, 1000, 50000, true),
+                                '1m': generateRandomData(30, 5000, 200000, true),
+                                '6m': generateRandomData(6, 30000, 500000, true),
+                                '1y': generateRandomData(12, 50000, 1000000, true)
+                            }
+                        }
+                    };
+                    resolve(mockData);
+                }, 800); // Simulate network delay
+            });
+        }
+        
+        // Load data and initialize the app
+        async function initializeApp() {
+            try {
+                const data = await fetchData();
+                updateStats(data);
+                setupEventListeners();
+            } catch (error) {
+                console.error('Error loading data:', error);
+                // Show error state
+                listenersElement.textContent = 'Error';
+                royaltiesElement.textContent = 'Error';
+                updateElement.textContent = 'Failed to load data';
+                listenersElement.classList.remove('loading-dots');
+                royaltiesElement.classList.remove('loading-dots');
+            }
+        }
+        
+        // Function to update stats display
+        function updateStats(data) {
+            const updateTime = new Date().toLocaleString('ru-RU');
+            
+            // Format and display listeners
+            listenersElement.textContent = formatNumber(data.listeners.current);
+            const listenersGrow = calculateGrowth(data.listeners.current, data.listeners.previous);
+            
+            // Устанавливаем класс в зависимости от положительного/отрицательного роста
+            if (listenersGrow !== null) {
+                listenersGrowth.textContent = `${listenersGrow >= 0 ? '+' : ''}${listenersGrow}%`;
+                listenersGrowth.className = listenersGrow >= 0 ? 'growth positive' : 'growth negative';
+            } else {
+                listenersGrowth.textContent = '';
+            }
+            
+            // Format and display royalties (гарантируем, что выплаты не отрицательные)
+            const royaltiesValue = Math.max(0, parseFloat(data.royalties.current)).toFixed(3);
+            royaltiesElement.textContent = parseFloat(royaltiesValue).toLocaleString('ru-RU') + '₽';
+            
+            const royaltiesGrow = calculateGrowth(data.royalties.current, data.royalties.previous);
+            
+            // Устанавливаем класс в зависимости от положительного/отрицательного роста
+            if (royaltiesGrow !== null) {
+                royaltiesGrowth.textContent = `${royaltiesGrow >= 0 ? '+' : ''}${royaltiesGrow}%`;
+                royaltiesGrowth.className = royaltiesGrow >= 0 ? 'growth positive' : 'growth negative';
+            } else {
+                royaltiesGrowth.textContent = '';
+            }
+            
+            // Update time
+            updateElement.textContent = 'Last update: ' + updateTime;
+            
+            // Remove loading animation
+            listenersElement.classList.remove('loading-dots');
+            royaltiesElement.classList.remove('loading-dots');
+            
+            // Store data for charts
+            window.appData = data;
+        }
+        
+        // Function to format numbers (1M, 100K, etc.)
+        function formatNumber(num) {
+            num = parseFloat(num);
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(0) + 'K';
+            }
+            return num.toString();
+        }
+        
+        // Function to calculate growth percentage
+        function calculateGrowth(current, previous) {
+            current = parseFloat(current);
+            previous = parseFloat(previous);
+            if (previous === 0) return null;
+            const growth = ((current - previous) / previous) * 100;
+            return parseFloat(growth.toFixed(1));
+        }
+        
+        // Function to generate random data for charts
+        function generateRandomData(count, min, max, nonNegative = false) {
+            const data = [];
+            let lastValue = Math.floor(Math.random() * (max - min) + min);
+            
+            for (let i = 0; i < count; i++) {
+                // Add some randomness but keep trend somewhat realistic
+                const change = Math.floor((Math.random() - 0.4) * (max - min) * 0.1);
+                lastValue = Math.min(max, Math.max(min, lastValue + change));
+                // Если nonNegative=true, гарантируем неотрицательные значения
+                if (nonNegative) {
+                    lastValue = Math.max(0, lastValue);
+                }
+                data.push(lastValue);
+            }
+            
+            return data;
+        }
+        
+        // Function to setup event listeners
+        function setupEventListeners() {
+            // Listeners panel click
+            document.getElementById('listeners-panel').addEventListener('click', () => {
+                openModal('listeners-modal', 'listeners', window.appData.listeners.history);
+            });
+            
+            // Royalties panel click
+            document.getElementById('royalties-panel').addEventListener('click', () => {
+                openModal('royalties-modal', 'royalties', window.appData.royalties.history);
+            });
+            
+            // Time period selectors
+            document.querySelectorAll('.time-period').forEach(period => {
+                period.addEventListener('click', function() {
+                    const modalId = this.closest('.modal').id;
+                    const chartType = modalId.includes('listeners') ? 'listeners' : 'royalties';
+                    const period = this.getAttribute('data-period');
+                    
+                    // Update active period
+                    this.closest('.time-periods').querySelectorAll('.time-period').forEach(p => {
+                        p.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    
+                    // Update chart
+                    updateChart(
+                        chartType === 'listeners' ? listenersChart : royaltiesChart,
+                        window.appData[chartType].history[period],
+                        period
+                    );
+                });
+            });
+            
+            // User avatar click to toggle menu
+            userAvatar.addEventListener('click', function(e) {
+                e.stopPropagation();
+                userMenu.classList.toggle('open');
+            });
+            
+            // Close menu when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!userMenu.contains(e.target) && e.target !== userAvatar) {
+                    userMenu.classList.remove('open');
+                }
+            });
+        }
+        
+        // Function to handle menu item clicks
+        function handleMenuItemClick(action) {
+            userMenu.classList.remove('open');
+            
+            switch(action) {
+                case 'payout':
+                    alert('Выплата: функция в разработке');
+                    break;
+                case 'support':
+                    alert('Поддержка: свяжитесь с нами через @support');
+                    break;
+                case 'logout':
+                    if (confirm('Вы уверены, что хотите выйти?')) {
+                        tg.close();
+                    }
+                    break;
+            }
+        }
+        
+        // Function to open modal and initialize chart
+        function openModal(modalId, chartType, historyData) {
+            const modal = document.getElementById(modalId);
+            const chartCanvas = document.getElementById(`${chartType}-chart`);
+            modal.style.display = 'flex';
+            
+            // Close user menu if open
+            userMenu.classList.remove('open');
+            
+            // Initialize or update chart
+            if (chartType === 'listeners') {
+                if (!listenersChart) {
+                    listenersChart = createChart(chartCanvas, historyData['1d'], 'Listeners', '#4CAF50');
+                } else {
+                    updateChart(listenersChart, historyData['1d'], '1d');
+                }
+            } else {
+                if (!royaltiesChart) {
+                    royaltiesChart = createChart(chartCanvas, historyData['1d'], 'Royalties (₽)', '#ff4d4d');
+                } else {
+                    updateChart(royaltiesChart, historyData['1d'], '1d');
+                }
+            }
+        }
+        
+        // Function to close modal
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        // Function to create Chart.js chart
+        function createChart(canvas, data, label, color) {
+            const ctx = canvas.getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: generateLabels(data.length, '1d'),
+                    datasets: [{
+                        label: label,
+                        data: data,
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointBackgroundColor: color,
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleFont: {
+                                size: 14,
+                                family: 'Montserrat'
+                            },
+                            bodyFont: {
+                                family: 'Montserrat'
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        if (label.includes('Royalties')) {
+                                            label += context.parsed.y.toLocaleString('ru-RU') + '₽';
+                                        } else {
+                                            label += formatNumber(context.parsed.y);
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false,
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                callback: function(value) {
+                                    return formatNumber(value);
+                                }
+                            },
+                            // Для графика выплат устанавливаем минимальное значение 0
+                            min: canvas.id === 'royalties-chart' ? 0 : undefined
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Function to update chart data
+        function updateChart(chart, newData, period) {
+            chart.data.labels = generateLabels(newData.length, period);
+            chart.data.datasets[0].data = newData;
+            // Для графика выплат устанавливаем минимальное значение 0
+            if (chart.canvas.id === 'royalties-chart') {
+                chart.options.scales.y.min = 0;
+            }
+            chart.update();
+        }
+        
+        // Function to generate labels based on period
+        function generateLabels(count, period) {
+            const now = new Date();
+            
+            if (period === '1d') {
+                return Array.from({ length: count }, (_, i) => {
+                    const date = new Date(now);
+                    date.setHours(now.getHours() - count + i + 1);
+                    return date.getHours() + ':00';
+                });
+            } else if (period === '1w') {
+                return Array.from({ length: count }, (_, i) => {
+                    const date = new Date(now);
+                    date.setDate(now.getDate() - count + i + 1);
+                    return date.toLocaleDateString('ru-RU', { weekday: 'short' });
+                });
+            } else if (period === '1m') {
+                return Array.from({ length: count }, (_, i) => {
+                    const date = new Date(now);
+                    date.setDate(now.getDate() - count + i + 1);
+                    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                });
+            } else if (period === '6m') {
+                return Array.from({ length: count }, (_, i) => {
+                    const date = new Date(now);
+                    date.setMonth(now.getMonth() - count + i + 1);
+                    return date.toLocaleDateString('ru-RU', { month: 'short' });
+                });
+            } else { // 1y
+                return Array.from({ length: count }, (_, i) => {
+                    const date = new Date(now);
+                    date.setMonth(now.getMonth() - (count - i - 1) * 1);
+                    return date.toLocaleDateString('ru-RU', { month: 'short' });
+                });
+            }
+        }
+        
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>
